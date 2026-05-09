@@ -25,8 +25,13 @@ def cleanFrequency(frequency: str) -> str | None:
 
 
 def getRadioChannelName(frequency: str) -> str:
-    hashedFrequency = hashlib.sha256(frequency.encode()).hexdigest()[:8]
-    return f"radio-{hashedFrequency}"
+    hashedFrequency = hashlib.sha256(frequency.encode()).hexdigest()
+
+    partOne = hashedFrequency[0:4]
+    partTwo = hashedFrequency[4:8]
+    partThree = hashedFrequency[8:12]
+
+    return f"cipher-{partOne}-{partTwo}-{partThree}"
 
 
 async def findRadioChannel(radioCategory: discord.CategoryChannel, frequency: str):
@@ -37,6 +42,39 @@ async def findRadioChannel(radioCategory: discord.CategoryChannel, frequency: st
             return channel
 
     return None
+
+
+def getLockedOverwrites(guild: discord.Guild, member: discord.Member):
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(
+            view_channel=False,
+            connect=False
+        ),
+        member: discord.PermissionOverwrite(
+            view_channel=True,
+            connect=True,
+            speak=True
+        )
+    }
+
+    if guild.me is not None:
+        overwrites[guild.me] = discord.PermissionOverwrite(
+            view_channel=True,
+            connect=True,
+            manage_channels=True,
+            move_members=True
+        )
+
+    return overwrites
+
+
+async def allowMemberIntoChannel(channel: discord.VoiceChannel, member: discord.Member):
+    await channel.set_permissions(
+        member,
+        view_channel=True,
+        connect=True,
+        speak=True
+    )
 
 
 @bot.event
@@ -116,11 +154,12 @@ async def freq(
         radioChannel = await guild.create_voice_channel(
             name=channelName,
             category=radioCategory,
+            overwrites=getLockedOverwrites(guild, member),
             reason=f"Radio frequency created by {member}"
         )
 
         await member.move_to(radioChannel)
-        await interaction.followup.send("Frequency created. Moving you now.", ephemeral=True)
+        await interaction.followup.send("Frequency created. Moving you.", ephemeral=True)
         return
 
     if action.value == "join":
@@ -128,8 +167,9 @@ async def freq(
             await interaction.followup.send("Frequency not found.", ephemeral=True)
             return
 
+        await allowMemberIntoChannel(radioChannel, member)
         await member.move_to(radioChannel)
-        await interaction.followup.send("Moving you now.", ephemeral=True)
+        await interaction.followup.send("Moving you.", ephemeral=True)
         return
 
 
