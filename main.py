@@ -16,8 +16,10 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
     try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash command(s)")
+        for guild in bot.guilds:
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            print(f"Synced {len(synced)} slash command(s) to {guild.name} ({guild.id})")
     except Exception as error:
         print(f"Failed to sync slash commands: {type(error).__name__}: {error}")
 
