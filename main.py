@@ -1,4 +1,6 @@
 import os
+import re
+import hashlib
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -11,6 +13,30 @@ intents = discord.Intents.default()
 intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+def cleanFrequency(frequency: str) -> str | None:
+    frequency = frequency.strip().lower()
+
+    if not re.fullmatch(r"[a-z0-9.-]{1,20}", frequency):
+        return None
+
+    return frequency
+
+
+def getRadioChannelName(frequency: str) -> str:
+    hashedFrequency = hashlib.sha256(frequency.encode()).hexdigest()[:8]
+    return f"radio-{hashedFrequency}"
+
+
+async def findRadioChannel(radioCategory: discord.CategoryChannel, frequency: str):
+    channelName = getRadioChannelName(frequency)
+
+    for channel in radioCategory.voice_channels:
+        if channel.name == channelName:
+            return channel
+
+    return None
 
 
 @bot.event
@@ -28,8 +54,8 @@ async def on_ready():
 
 @bot.tree.command(name="freq", description="Create or join a radio frequency")
 @app_commands.describe(
-    action="Choose whether to create or join a frequency",
-    frequency="The radio frequency to create or join"
+    action="Create or join a frequency",
+    frequency="The frequency"
 )
 @app_commands.choices(action=[
     app_commands.Choice(name="create", value="create"),
@@ -40,45 +66,71 @@ async def freq(
     action: app_commands.Choice[str],
     frequency: str
 ):
+    await interaction.response.defer(ephemeral=True)
+
     guild = interaction.guild
     member = interaction.user
+
+    if guild is None:
+        await interaction.followup.send("This command must be used in a server.", ephemeral=True)
+        return
+
+    if not isinstance(member, discord.Member):
+        await interaction.followup.send("Could not read your server member info.", ephemeral=True)
+        return
 
     setupChannel = guild.get_channel(setupChannelId)
     radioCategory = guild.get_channel(radioCategoryId)
 
-    if setupChannel is None:
-        await interaction.response.send_message(
-            "Setup channel could not be found. Check SETUP_CHANNEL_ID in Railway.",
-            ephemeral=True
-        )
+    if not isinstance(setupChannel, discord.VoiceChannel):
+        await interaction.followup.send("Setup voice channel is not configured correctly.", ephemeral=True)
         return
 
-    if radioCategory is None:
-        await interaction.response.send_message(
-            "Radio category could not be found. Check RADIO_CATEGORY_ID in Railway.",
-            ephemeral=True
-        )
+    if not isinstance(radioCategory, discord.CategoryChannel):
+        await interaction.followup.send("Radio category is not configured correctly.", ephemeral=True)
         return
 
     if member.voice is None or member.voice.channel is None:
-        await interaction.response.send_message(
-            f"You need to be in `{setupChannel.name}` before using this command.",
-            ephemeral=True
-        )
+        await interaction.followup.send(f"Join `{setupChannel.name}` first.", ephemeral=True)
         return
 
     if member.voice.channel.id != setupChannelId:
-        await interaction.response.send_message(
-            f"You need to be in `{setupChannel.name}` before using this command.",
-            ephemeral=True
-        )
+        await interaction.followup.send(f"Join `{setupChannel.name}` first.", ephemeral=True)
         return
 
-    await interaction.response.send_message(
-        f"Voice check passed. You are in `{setupChannel.name}`.\n"
-        f"Action: `{action.value}`\n"
-        f"Frequency: `{frequency}`",
-        ephemeral=True
-    )
+    cleanedFrequency = cleanFrequency(frequency)
+
+    if cleanedFrequency is None:
+        await interaction.followup.send("Invalid frequency.", ephemeral=True)
+        return
+
+    radioChannel = await findRadioChannel(radioCategory, cleanedFrequency)
+
+    if action.value == "create":
+        if radioChannel is not None:
+            await interaction.followup.send("That frequency already exists.", ephemeral=True)
+            return
+
+        channelName = getRadioChannelName(cleanedFrequency)
+
+        radioChannel = await guild.create_voice_channel(
+            name=channelName,
+            category=radioCategory,
+            reason=f"Radio frequency created by {member}"
+        )
+
+        await member.move_to(radioChannel)
+        await interaction.followup.send("Frequency created. Moving you now.", ephemeral=True)
+        return
+
+    if action.value == "join":
+        if radioChannel is None:
+            await interaction.followup.send("Frequency not found.", ephemeral=True)
+            return
+
+        await member.move_to(radioChannel)
+        await interaction.followup.send("Moving you now.", ephemeral=True)
+        return
+
 
 bot.run(token)
