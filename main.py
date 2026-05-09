@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import os
 import re
 
@@ -58,13 +57,7 @@ def cleanFrequency(frequency: str) -> str | None:
 
 
 def getRadioChannelName(frequency: str) -> str:
-    hashedFrequency = hashlib.sha256(frequency.encode()).hexdigest()
-
-    partOne = hashedFrequency[0:4]
-    partTwo = hashedFrequency[4:8]
-    partThree = hashedFrequency[8:12]
-
-    return f"cipher-{partOne}-{partTwo}-{partThree}"
+    return f"Freq: {frequency}"
 
 
 def isRadioChannel(channel: discord.abc.GuildChannel | None) -> bool:
@@ -74,7 +67,7 @@ def isRadioChannel(channel: discord.abc.GuildChannel | None) -> bool:
     if channel.category_id != radioCategoryId:
         return False
 
-    if not channel.name.startswith("cipher-"):
+    if not channel.name.startswith("Freq: "):
         return False
 
     return True
@@ -163,7 +156,6 @@ async def deleteChannelAfterDelay(channelId: int, guildId: int) -> None:
         if not isRadioChannel(channel):
             return
 
-        # Re-check after 30 seconds in case someone joined again.
         if len(channel.members) > 0:
             print(f"Skipped delete because channel is no longer empty: {channel.name}")
             return
