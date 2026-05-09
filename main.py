@@ -62,7 +62,7 @@ def getRadioChannelName(frequency: str) -> str:
     partTwo = hashedFrequency[4:8]
     partThree = hashedFrequency[8:12]
 
-    return f"cipher-{partOne}-{partTwo}-{partThree}"
+    return f"radiofreq-{partOne}-{partTwo}-{partThree}"
 
 
 def isRadioChannel(channel: discord.abc.GuildChannel | None) -> bool:
@@ -72,7 +72,7 @@ def isRadioChannel(channel: discord.abc.GuildChannel | None) -> bool:
     if channel.category_id != radioCategoryId:
         return False
 
-    if not channel.name.startswith("cipher-"):
+    if not channel.name.startswith("radiofreq-"):
         return False
 
     return True
